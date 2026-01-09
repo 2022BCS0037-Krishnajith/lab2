@@ -5,7 +5,7 @@ import joblib
 
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
-from sklearn.linear_model import LinearRegression
+from sklearn.linear_model import Ridge
 from sklearn.metrics import mean_squared_error, r2_score
 
 # Ensure output directory exists
@@ -28,8 +28,8 @@ scaler = StandardScaler()
 X_train = scaler.fit_transform(X_train)
 X_test = scaler.transform(X_test)
 
-# 3. Train the model
-model = LinearRegression()
+# 3. Train the model (Ridge Regression)
+model = Ridge(alpha=1.0)
 model.fit(X_train, y_train)
 
 # Predictions
