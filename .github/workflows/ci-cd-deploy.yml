@@ -1,0 +1,129 @@
+name: Lab 2 - CI CD Pipeline
+
+on:
+  push:
+    branches: [ "main" ]
+
+jobs:
+
+# ======================================================
+# CI — Train model
+# ======================================================
+  train:
+    name: Train Model (CI)
+    runs-on: ubuntu-latest
+
+    outputs:
+      mse: ${{ steps.read-metrics.outputs.mse }}
+      r2:  ${{ steps.read-metrics.outputs.r2 }}
+
+    steps:
+      # 1. Checkout
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # 2. Python
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      # 3. Dependencies
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          sudo apt-get install -y jq
+
+      # 4. Train
+      - name: Run training script
+        run: |
+          python train.py
+
+      # 5. Read metrics
+      - name: Read metrics
+        id: read-metrics
+        run: |
+          mse=$(jq '.mse' output/results.json)
+          r2=$(jq '.r2' output/results.json)
+
+          echo "mse=$mse" >> $GITHUB_OUTPUT
+          echo "r2=$r2" >> $GITHUB_OUTPUT
+
+      # 6. Upload artifacts
+      - name: Upload model + metrics
+        uses: actions/upload-artifact@v4
+        with:
+          name: lab2-artifacts
+          path: output/
+
+
+# ======================================================
+# CD — Deploy model
+# ======================================================
+  deploy:
+    name: Deploy Model (CD)
+    needs: train
+    runs-on: ubuntu-latest
+
+    steps:
+
+      - name: Print metrics
+        run: |
+          echo "New MSE: ${{ needs.train.outputs.mse }}"
+          echo "New R2 : ${{ needs.train.outputs.r2 }}"
+          echo "Best MSE: ${{ vars.BEST_MSE }}"
+          echo "Best R2 : ${{ vars.BEST_R2 }}"
+
+      # 1. Metric gate
+      - name: Check metric improvement
+        run: |
+          better=$(echo "${{ needs.train.outputs.r2 }} > ${{ vars.BEST_R2 }}" | bc -l)
+
+          if [ "$better" -ne 1 ]; then
+            echo "2022BCS0001 — Model did not improve. Skipping deployment."
+            exit 0
+          fi
+
+      # 2. Checkout
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # 3. Download trained model
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: lab2-artifacts
+          path: output/
+
+      # 4. Docker login
+      - name: Login to DockerHub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      # 5. Build image
+      - name: Build Docker image
+        run: |
+          docker build -t ${{ secrets.DOCKERHUB_USERNAME }}/wine-quality-api:latest .
+
+      # 6. Push image
+      - name: Push Docker image
+        run: |
+          docker push ${{ secrets.DOCKERHUB_USERNAME }}/wine-quality-api:latest
+
+      # 7. Update best metrics
+      - name: Update BEST metrics
+        env:
+          GH_TOKEN: ${{ secrets.GH_SECRET }}
+        run: |
+          gh api \
+            --method PATCH \
+            repos/${{ github.repository }}/actions/variables/BEST_MSE \
+            -f value=${{ needs.train.outputs.mse }}
+
+          gh api \
+            --method PATCH \
+            repos/${{ github.repository }}/actions/variables/BEST_R2 \
+            -f value=${{ needs.train.outputs.r2 }}
