@@ -12,8 +12,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # 5. Copy application code and model
 COPY app.py .
-COPY output/model.pkl .
-COPY output/results.json .
+COPY output ./output
 
 # 6. Expose FastAPI port
 EXPOSE 8000
