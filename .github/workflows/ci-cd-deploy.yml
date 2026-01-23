@@ -38,7 +38,7 @@ jobs:
       # 4. Train
       - name: Run training script
         run: |
-          python train.py
+          python scripts/train.py
 
       # 5. Read metrics
       - name: Read metrics
