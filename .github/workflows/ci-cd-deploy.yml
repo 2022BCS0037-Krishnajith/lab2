@@ -116,7 +116,7 @@ jobs:
       # 7. Update best metrics
       - name: Update BEST metrics
         env:
-          GH_TOKEN: ${{ secrets.GH_SECRET }}
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
         run: |
           gh api \
             --method PATCH \
